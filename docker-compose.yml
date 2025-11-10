@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: hospital_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: hospital_db
+      MYSQL_USER: hospital_user
+      MYSQL_PASSWORD: root
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./init-db:/docker-entrypoint-initdb.d
+    command: --default-authentication-plugin=mysql_native_password --bind-address=0.0.0.0
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-psecret"]
+      timeout: 10s
+      retries: 10
+      interval: 5s
+    networks:
+      - hospital_network
+
+  app:
+    build: .
+    container_name: hospital_app
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASS: secret
+      DB_NAME: hospital_db
+      PORT: 4000
+      NODE_ENV: development
+      JWT_SECRET: your_jwt_secret_min_32_chars_change_in_production_environment
+      JWT_EXPIRES_IN: 1h
+      JWT_REFRESH_EXPIRES_IN: 7d
+      BCRYPT_SALT_ROUNDS: 12
+      LOG_LEVEL: info
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./src:/usr/src/app/src
+      - ./logs:/usr/src/app/logs
+    networks:
+      - hospital_network
+    restart: unless-stopped
+    command: sh -c "sleep 15 && npm run migrate:latest && npm run seed:run && node src/server.js"
+
+volumes:
+  mysql_data:
+    driver: local
+
+networks:
+  hospital_network:
+    driver: bridge
